@@ -251,8 +251,37 @@ Find a dataset containing multiple categorical and continuous variables. You'll 
 4.  Scatterplot
 
 ```{r}
-latvia <- read_csv(here::here("week1", "latvia_forests.csv"))
-glimpse(latvia)
+# reading in Ukrainian seashell data
+seashells <- read_csv(here::here("week1", "Donacilla.csv"))
+
+#checking it out
+glimpse(seashells)
+```
+```{r}
+# cleaning data a little
+# specifically population column and factor names
+
+seashells$population <- recode(seashells$population, 
+                               "Budakskaya spit 2017" = "Budasksaya Spit",
+                               "Dzharylgach 2016" = "Dzharylgach",
+                               "Grigorovka 2019" = "Grigorovka",
+                               "Sasyk 2013" = "Sasyk")
+
+seashells <- seashells %>%  
+  rename(location = population)
+```
+
+```{r}
+# making a scatterplot comparing length to width, colored by pop
+ggplot(data=seashells, aes(x = l, y = w, color = location)) +
+  geom_point() +
+  labs(x = "Length (mm)", y = "Width (mm)", title = expression(paste(italic("Donacilla cornea"), " size")), 
+  subtitle= "Data from Ukrainian beaches")
+```
+```{r}
+# making a contingency table
+pop_color_table <- table(seashells$location, seashells$bg)
+addmargins(pop_color_table)
 ```
 
 ## Finished?
