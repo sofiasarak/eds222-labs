@@ -261,14 +261,14 @@ Read the data from the rreas.csv file and create a scatter plot relating fish ab
 
 ```{r}
 
-rreas_murres <- read_csv("data/rreas.csv")
+rreas_murres <- read_csv("week2/data/rreas.csv")
 
 ```
 
 ```{r}
 #| label: q6
 
-
+head(rreas_murres)
 
 ```
 
