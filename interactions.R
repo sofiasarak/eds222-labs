@@ -14,3 +14,5 @@ summary(penguin_int_mod_2)
 # but this also works, as well
 penguin_int_mod_3 <- lm(bill_length_mm ~ body_mass_g + sex + body_mass_g*sex, data = penguins)
 summary(penguin_int_mod_3)
+
+penguin_sum <- summary(penguin_int_mod)
