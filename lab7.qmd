@@ -79,10 +79,10 @@ drinking_water <- read_csv(here("drinking_water.csv"))
 | Column              | Meaning |
 |---------------------|---------|
 | `pwsid`             |  water system id       |
-| `pwsname`           |  water system name       |
+| `pwsname`           |  public water system name    |
 | `pctpov`            |  percent poverty       |
 | `pcthisp`           |  percent hispanic       |
-| `health`            |  ?       |
+| `health`            |  # of times violations occurred      |
 | `medianincomehouse` | houshold median income        |
 | `violation`         | binary of whether there was a violation or not        |
 | `pcthisp_bin`       | bin group for percent hispanic        |
@@ -143,7 +143,9 @@ Let's begin by investigating class in isolation. **Fit a logistic model to see h
 ```{r}
 #| label: fit-model-class
 
-
+class_model <- glm(violation ~ pctpov, # formula: response ~ predictor(s))
+                   data = drinking_water, # data remains unchanged
+                   family = binomial(link = "logit")) # family and link function
 
 ```
 
@@ -151,11 +153,36 @@ Just as we did with linear regression, you can inspect coefficient estimates, p-
 
 **What is the best estimate for the % Below Poverty coefficient?**
 
+```{r}
+summary(class_model)$coefficients[2]
+
+coef(class_model)["pctpov"]
+```
+
+Best coefficient estimate is 0.017.
+
 **Is the coefficient significantly different than 0? Assume critical threshold of 0.05.**
 
+```{r}
+summary(class_model)$coefficients["pctpov", 4]
+```
+
+p-value is <2e-16 *** (significantly different).
+
 **What is the 95% CI for the coefficient?**
+```{r}
+confint(class_model)[c(2,4)]
+
+confint(class_model)["pctpov", ] # "from this row, give me all of the columns"
+```
+
+95% CI is [0.014, 0.02].
 
 **Based on the sign, what is the relationship between class and SDWA violations?**
+
+There is a positive relationship; as percent poverty increases, number of SDWA violations also increase.
+
+Sign is positive, so a positive association between the two.
 
 ## Make predictions
 
@@ -180,14 +207,26 @@ I use `expand_grid()` instead of `tibble()` when making the data frame of predic
 ```{r}
 #| label: predict-class-model
 
+# a grid of predictors to generate predictions for
+pred_grid <- expand_grid(pctpov = 1:100)
 
+# generate our predictions
+class_model_pred <- pred_grid %>% 
+  mutate(p = predict(object = class_model,
+                     newdata = pred_grid,
+                     type = "response")) # response scale: we're looking at p
 
+# "link" scale: graphs logit on the y axis (y = mx + b)
+
+# p is probability of safe water violation occuring based on pctpov (based on the model we fed it)
 ```
 
 ```{r}
 #| label: plot-class-best-estimate
 
-
+ggplot(class_model_pred, aes(x = pctpov, y = p)) +
+  geom_line() +
+  ylim(0, 1)
 
 ```
 
@@ -204,7 +243,26 @@ When constructing the 95% CI for $p$, one thing remains the same and one thing h
 ```{r}
 #| label: predict-class-model-ci
 
+class_model_se <- predict(object = class_model,
+                          newdata = pred_grid,
+                          type = "link", # stay in link space
+                          se.fit = TRUE)
 
+# go from link space to response space
+linkinv <- family(class_model)$linkinv # (undoing logit of p)
+class_model_pred <- pred_grid %>% 
+  mutate(
+    # get logit(p)
+    logit_p = class_model_se$fit,
+    # 95% CI in link space
+    logit_p_se = class_model_se$se.fit,
+    logit_p_lwr = qnorm(0.025, mean = logit_p, sd = logit_p_se),
+    logit_p_upr = qnorm(0.975, mean = logit_p, sd = logit_p_se),
+    # undo the link function using linkinv
+    p = linkinv(logit_p),
+    p_lwr = linkinv(logit_p_lwr),
+    p_upr = linkinv(logit_p_upr)
+  )
 
 ```
 
@@ -213,9 +271,14 @@ And here's the fit with the 95% CI presented as the familiar ribbon.
 ```{r}
 #| label: plot-class-ci
 
-
+ggplot(class_model_pred, aes(x = pctpov, y = p)) +
+  geom_ribbon(aes(ymin = p_lwr, ymax = p_upr), alpha = 0.2) +
+  geom_line()
 
 ```
+
+
+* Link space is where we can do the math, response space is where we can interpret it.
 
 **What is the probability of a SDWA violation in a district where 5% of households are below the poverty line? When 50% are? Show the best estimate and 95% CI.**
 
@@ -241,7 +304,61 @@ Switzer and Teodoro demonstrated that the *interaction* between race and class i
 ```{r}
 #| label: your-turn
 
+# fitting a model based on our data, with pctpov and interaction term
+class_model2 <- glm(violation ~ pctpov + pcthisp + pctpov * pcthisp, # formula: response ~ predictor(s))
+                   data = drinking_water, # data remains unchanged
+                   family = binomial(link = "logit"))
 
+# creating a grid of possible pctpov and pcthisp values
+# filtering for only 10, 30, and 50 pct poverty
+pred_grid2 <- expand_grid(pctpov = c(10, 30, 50),
+                         pcthisp = 1:100)
+
+# generate our predictions
+class_model2_pred <- pred_grid2 %>% 
+  mutate(p = predict(object = class_model2,
+                     newdata = pred_grid2,
+                     type = "response")) # response scale: we're looking at p
+
+# these steps produce a data frame with different combinations of pcthisp and pctpov values, and then the probability that a violation occurred with each combination
+
+```
+
+```{r}
+class_model2_se <- predict(object = class_model2,
+                          newdata = pred_grid2,
+                          type = "link", # stay in link space
+                          se.fit = TRUE)
+
+# go from link space to response space
+linkinv <- family(class_model2)$linkinv # (undoing logit of p; creates function to do so)
+
+
+class_model2_pred <- pred_grid2 %>% 
+  mutate(
+    # get logit(p)
+    logit_p = class_model2_se$fit,
+    # 95% CI in link space
+    logit_p_se = class_model2_se$se.fit,
+    logit_p_lwr = qnorm(0.025, mean = logit_p, sd = logit_p_se),
+    logit_p_upr = qnorm(0.975, mean = logit_p, sd = logit_p_se),
+    # undo the link function using linkinv
+    p = linkinv(logit_p),
+    p_lwr = linkinv(logit_p_lwr),
+    p_upr = linkinv(logit_p_upr)
+  )
+```
+
+
+```{r}
+
+class_model2_10 <- class_model2_pred %>% 
+  filter(pctpov == 10)
+
+
+ggplot() +
+  geom_ribbon(class_model2_10, aes(x = pcthisp, y = p, ymin = p_lwr, ymax = p_upr), alpha = 0.2) +
+  geom_line(class_model2_10, aes(x = pcthisp, y = p))
 
 ```
 
