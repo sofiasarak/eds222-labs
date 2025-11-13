@@ -351,14 +351,36 @@ class_model2_pred <- pred_grid2 %>%
 
 
 ```{r}
+class_model2_pred_filtered <- class_model2_pred %>% 
+  filter(pctpov %in% c(10, 30, 50))
 
-class_model2_10 <- class_model2_pred %>% 
-  filter(pctpov == 10)
+
+ggplot(class_model2_pred_filtered, aes(pcthisp, p)) +
+  geom_line(aes(color = as_factor(pctpov)),
+            lwd = 1) +
+  geom_ribbon(aes(ymin = p_lwr, ymax = p_upr, fill = as_factor(pctpov)),
+              alpha = 0.25) +
+  labs(fill = "% Poverty", 
+       y = "Probability of Violation Occurring",
+       x = "% Hispanic") +
+  scale_color_manual(values = c("yellow", "orange", "red"),
+                     labels = c("10 %", "30 %", "50 %")) +
+  scale_fill_manual(values = c("yellow", "orange", "red"),
+                     labels = c("10 %", "30 %", "50 %")) +
+  guides(color = "none")
+```
 
 
+```{r}
 ggplot() +
-  geom_ribbon(class_model2_10, aes(x = pcthisp, y = p, ymin = p_lwr, ymax = p_upr), alpha = 0.2) +
-  geom_line(class_model2_10, aes(x = pcthisp, y = p))
+  geom_ribbon(class_model2_10, 
+              aes(x = pcthisp, y = p, ymin = p_lwr, ymax = p_upr), 
+              alpha = 0.2,
+              color = "red") +
+  geom_line(class_model2_10, 
+            aes(x = pcthisp, y = p),
+            fill = "red") 
+  
 
 ```
 
