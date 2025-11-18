@@ -76,17 +76,17 @@ drinking_water <- read_csv(here("drinking_water.csv"))
 
 **Describe what you think each of the columns represents.**
 
-| Column              | Meaning |
-|---------------------|---------|
-| `pwsid`             |  water system id       |
-| `pwsname`           |  public water system name    |
-| `pctpov`            |  percent poverty       |
-| `pcthisp`           |  percent hispanic       |
-| `health`            |  # of times violations occurred      |
-| `medianincomehouse` | houshold median income        |
-| `violation`         | binary of whether there was a violation or not        |
-| `pcthisp_bin`       | bin group for percent hispanic        |
-| `pctpov_bin`        | bin group for percent poverty        |
+| Column              | Meaning                                        |
+|---------------------|------------------------------------------------|
+| `pwsid`             | water system id                                |
+| `pwsname`           | public water system name                       |
+| `pctpov`            | percent poverty                                |
+| `pcthisp`           | percent hispanic                               |
+| `health`            | \# of times violations occurred                |
+| `medianincomehouse` | houshold median income                         |
+| `violation`         | binary of whether there was a violation or not |
+| `pcthisp_bin`       | bin group for percent hispanic                 |
+| `pctpov_bin`        | bin group for percent poverty                  |
 
 **Create three figures summarizing the relationships between race, class, and SDWA violations.**
 
@@ -167,16 +167,17 @@ Best coefficient estimate is 0.017.
 summary(class_model)$coefficients["pctpov", 4]
 ```
 
-p-value is <2e-16 *** (significantly different).
+p-value is \<2e-16 \*\*\* (significantly different).
 
 **What is the 95% CI for the coefficient?**
+
 ```{r}
 confint(class_model)[c(2,4)]
 
 confint(class_model)["pctpov", ] # "from this row, give me all of the columns"
 ```
 
-95% CI is [0.014, 0.02].
+95% CI is \[0.014, 0.02\].
 
 **Based on the sign, what is the relationship between class and SDWA violations?**
 
@@ -277,8 +278,7 @@ ggplot(class_model_pred, aes(x = pctpov, y = p)) +
 
 ```
 
-
-* Link space is where we can do the math, response space is where we can interpret it.
+-   Link space is where we can do the math, response space is where we can interpret it.
 
 **What is the probability of a SDWA violation in a district where 5% of households are below the poverty line? When 50% are? Show the best estimate and 95% CI.**
 
@@ -349,7 +349,6 @@ class_model2_pred <- pred_grid2 %>%
   )
 ```
 
-
 ```{r}
 class_model2_pred_filtered <- class_model2_pred %>% 
   filter(pctpov %in% c(10, 30, 50))
@@ -369,7 +368,6 @@ ggplot(class_model2_pred_filtered, aes(pcthisp, p)) +
                      labels = c("10 %", "30 %", "50 %")) +
   guides(color = "none")
 ```
-
 
 ```{r}
 ggplot() +

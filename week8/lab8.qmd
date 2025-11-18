@@ -1,0 +1,299 @@
+---
+title: "Lab 8"
+subtitle: "California Wildfire Occurrence"
+toc: true
+editor: visual
+format:
+  html:
+    other-links:
+      - text: Download Source
+        href: lab8.qmd
+      - text: Wildfire Data
+        href: data/wildfires.zip
+editor_options: 
+  chunk_output_type: console
+bibliography: references.bib
+---
+
+## Learning objectives
+
+In today's lab you will...
+
+1.  Fit a **Poisson regression** model to count outcomes
+2.  **Visualize** predictions
+3.  **Compare** properly and improperly specified models
+
+Complete sections **Poisson model notation and R code** and **Read and explore the data** before lab.
+
+```{r}
+#| label: setup
+#| message: false
+#| warning: false
+
+library(tidyverse)
+library(terra)
+library(tidyterra)
+library(here)
+library(stars)
+library(ggplot2)
+theme_set(theme_classic(12))
+set.seed(123)
+
+```
+
+## Poisson model notation and R code
+
+In statistical notation, Poisson models take the form:
+
+$$
+\begin{align}
+\text{CountOutcome} &\sim Poisson(\lambda) \\
+log(\lambda) &= \beta_0 + \beta_1 \text{Predictor}
+\end{align}
+$$
+
+In R, you can fit a poisson model like this:
+
+``` r
+poisson_model <- glm(count_outcome ~ predictor,
+                     data = my_data,
+                     family = poisson(link = "log"))
+```
+
+**Compare Poisson and logistic regression. Which of the following change between them?**
+
+-   **Response family**
+
+-   **Link function**
+
+-   **Response**
+
+-   **Predictor**
+
+## Read and explore the data
+
+**Download and unzip wildfire.zip. Read the spatial and tabular data.** This includes:
+
+-   A wildfire shapefile
+
+-   A vapor pressure deficit (VPD) raster
+
+-   A table of annual vapor pressure deficit and wildfire data
+
+```{r}
+#| label: read-data
+
+wildfire <- st_read(here("week8/wildfires/wildfires.shp"))
+vpd <- rast(here("week8/wildfires/vpd.tiff"))
+table <- read_csv(here("week8/wildfires/wildfires.csv"))
+california <- st_read(here("week8/ca_state/CA_State.shp"))
+```
+
+**Recreate the three figures below.** Yours don't have to be exact replicates, but they should communicate the same messages.
+
+Figure 1: A scatter plot showing the relationship between vapor pressure deficit and wildfire occurence.
+
+![](week8/images/vpd_fires.png){width="525"}
+
+Figure 2: Maps of summer VPD in 1980, 2000, and 2020.
+
+![](week8/images/vpd_maps.png){width="699"}
+
+Figure 3: Maps of wildfires in 1980, 2000, and 2020.
+
+![](week8/images/fire_maps.png){width="700"}
+
+```{r}
+#| label: fig-explore
+# Figure 1
+ggplot(data = table, aes(x = mean_vpd_kpa,
+                         y = n_fires,
+                         color = fire_year)) +
+  geom_point() +
+  labs(x = "Mean VPD (kPa)",
+       y = "Fires >10k acres (n)", 
+       color = "Year")
+
+# Figure 2
+vpd_fig2 <- vpd[[c("1980", "2000", "2020")]]
+
+ggplot() +
+  geom_spatraster(data = vpd_fig2) +
+  facet_wrap(~lyr) 
+
+# Figure 3
+wildfire_fig3 <- wildfire %>% 
+  filter(fire_year == c("1980", "2000", "2020"))
+
+california <- st_transform(california, crs = st_crs(wildfire_fig3))
+
+ggplot() +
+  geom_sf(data = california,
+          fill = "cyan") +
+  geom_sf(data = wildfire_fig3,
+          fill = "red") +
+  facet_wrap(~fire_year)
+```
+
+## Fit model
+
+Our question is:
+
+*How is the occurrence of wildfires in California associated with the previous summer's vapor pressure deficit?*
+
+For more details about vapor pressure deficit and its relationship with fires, see @abatzoglou2016 and @seager2015.
+
+**Fit a poisson model to see how `n_fires` responds to `mean_vpd_kpa`**.
+
+```{r}
+#| label: fit-model
+
+wildfire_model <- glm(n_fires ~ mean_vpd_kpa, # formula: response ~ predictor(s))
+                   data = table, # data remains unchanged
+                   family = poisson(link = "log")) # family and link function
+
+
+```
+
+## Make predictions
+
+As with logistic regression, the coefficients of a Poisson regression model are not terribly intuitive. Once again, we will interpret our model by visualizing predictions. Refer to lab 7 for details about how to generate predictions and CIs for a generalized linear model.
+
+**Generate predictions and a CI for the number of fires in the range of VPD values in the dataset.**
+
+```{r}
+#| label: predict-fires
+
+# restrict predictor to the range of this model
+pred_grid <- expand_grid(mean_vpd_kpa = seq(from = 0, to = 3, length.out = 100))
+
+# generate our predictions
+wildfire_model_pred <- pred_grid %>% 
+  mutate(n_fires = predict(object = wildfire_model,
+                     newdata = pred_grid,
+                     type = "response")) 
+
+```
+
+**Plot the raw data with the predictions. Your figure should look something like the figure below.**
+
+![](images/fire_preds.png){width="525"}
+
+```{r}
+#| label: plot-predictions
+
+ggplot(wildfire_model_pred, aes(x = mean_vpd_kpa, y = n_fires)) +
+  geom_line() +
+  xlim(1.9, 3) +
+  ylim(0, 40)
+
+```
+
+```{r}
+wildfire_model_se <- predict(object = wildfire_model,
+                          newdata = pred_grid,
+                          type = "link", # stay in link space
+                          se.fit = TRUE)
+
+# go from link space to response space
+wildfire_model_pred <- pred_grid %>% 
+  
+  mutate(
+    # add column that is just the mean/log_lambda
+    log_lambda = wildfire_model_se$fit,
+    
+    # add column that is the se/log_lambda_se
+    log_lambda_se = wildfire_model_se$se.fit,
+    
+    # 95% CI in link space
+    log_lambda_lwr = qnorm(0.025, mean = log_lambda, sd = log_lambda_se),
+    log_lambda_upr = qnorm(0.975, mean = log_lambda, sd = log_lambda_se),
+    
+    # undo the link function using exp()
+    lambda = exp(log_lambda),
+    lambda_lwr = exp(log_lambda_lwr),
+    lambda_upr = exp(log_lambda_upr)
+  )
+```
+
+```{r}
+ggplot(wildfire_model_pred, aes(x = mean_vpd_kpa, y = lambda)) +
+  geom_ribbon(aes(ymin = lambda_lwr, ymax = lambda_upr), alpha = 0.2) +
+  geom_line() +
+  labs(y = "Fires >10k acres (n)",
+       x = "Mean VPD (kPa)") + 
+  geom_point(data = table, aes(x = mean_vpd_kpa,
+                         y = n_fires,
+                         color = fire_year)) +
+  xlim(1.9, 3) +
+  ylim(0, 40)
+```
+
+Making jagged CI (prediction of real value)
+
+```{r}
+# add columns to class_model_pred using qpois
+wildfire_model_pred <- wildfire_model_pred %>% 
+  mutate(
+    # 95% poisson CI
+    pois_lwr = qpois(0.025, lambda = lambda),
+    pois_upr = qpois(0.975, lambda = lambda),
+    )
+```
+
+```{r}
+ggplot(wildfire_model_pred, aes(x = mean_vpd_kpa, y = lambda)) +
+  geom_ribbon(aes(ymin = pois_lwr, ymax = pois_upr), 
+              alpha = 0.2,
+              fill = "yellow") +
+  geom_ribbon(aes(ymin = lambda_lwr, ymax = lambda_upr), 
+              alpha = 0.2,
+              fill = "orange") +
+  geom_line(lwd = 1.25,
+            color = "cornflowerblue") +
+  geom_point(data = table, aes(x = mean_vpd_kpa,
+                         y = n_fires,
+                         color = fire_year)) +
+  labs(y = "Fires >10k acres (n)",
+       x = "Mean VPD (kPa)",
+       color = "Year") +
+  xlim(1.9, 3) +
+  ylim(0, 40)
+```
+
+```{r}
++ scale_fill_steps2()
+```
+
+```{r}
+exp(qnorm(c(0.025, 0.975), mean = pred_lambda, sd = sd_lambda))
+```
+
+## **Compare** properly and improperly specified models
+
+Seeing a scatter plot of mean VPD and the number of fires in a year, an uncritical statistics student may think to fit a linear model. But the fact that the response is a *count* should suggest another approach is necessary. Contrast the model summary and predictions from your Poisson model against a linear model.
+
+1.  Create a new model using `lm()`.
+
+```{r}
+wildfire_linear_model <- lm(n_fires ~ mean_vpd_kpa, # formula: response ~ predictor(s))
+                   data = table)
+```
+
+2.  Compare the summaries of your Poisson model and the linear model.\
+    **Is the coefficient for `mean_vpd_kpa` significant in both models? What does that mean for your inferences?**
+
+```{r}
+summary(wildfire_model)
+summary(wildfire_linear_model)
+```
+
+The coefficient for `mean_vpd_kpa` is not significant in the linear model, meaning that I would be interpeting that there is no significance even though, with the proper model, there is.
+
+3.  Use predictions and components of the linear model to answer the following questions.\
+    **What is the estimate for** $\sigma$ **in your linear model?\
+    What does the linear model predict** $\mu$ **is** **when the VPD is at the minimum value in the dataset?\
+    What is the 95% interval for the predicted number of fires for that mean and standard deviation (hint: use `qnorm()`)?\
+    Why doesn't that interval make any sense?**
+
+**Based on your answers to the questions above, why is using a properly specified model important?**
